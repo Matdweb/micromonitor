@@ -1,0 +1,5 @@
+{
+  "AWS": {"cpu_hour": 0.025, "gb_memory_hour": 0.005},
+  "Azure": {"cpu_hour": 0.022, "gb_memory_hour": 0.006},
+  "GCP": {"cpu_hour": 0.021, "gb_memory_hour": 0.004}
+}

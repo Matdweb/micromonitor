@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-terminal-bg text-terminal-text font-mono;
+  background-image: linear-gradient(90deg, rgba(88,166,255,0.05) 1px, transparent 1px),
+                    linear-gradient(0deg, rgba(88,166,255,0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+  animation: gridmove 20s linear infinite;
+}
+
+@keyframes gridmove {
+  0% {
+    background-position: 0 0, 0 0;
+  }
+  100% {
+    background-position: 20px 20px, 20px 20px;
+  }
+}
