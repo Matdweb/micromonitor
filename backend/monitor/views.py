@@ -13,13 +13,15 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .models import ContainerBenchmark 
+from django.http import StreamingHttpResponse
+from docker import from_env
 
 PRICING_FILE = os.path.join(os.path.dirname(__file__), "pricing.json")
 
 DEFAULT_PRICING = {
-    "AWS": {"cpu_hour": 0.02, "gb_memory_hour": 0.005},
-    "Azure": {"cpu_hour": 0.018, "gb_memory_hour": 0.006},
-    "GCP": {"cpu_hour": 0.019, "gb_memory_hour": 0.004}
+  "AWS": {"cpu_hour": 0.025, "gb_memory_hour": 0.005},
+  "Azure": {"cpu_hour": 0.022, "gb_memory_hour": 0.006},
+  "GCP": {"cpu_hour": 0.021, "gb_memory_hour": 0.004}
 }
 
 def load_pricing():
@@ -276,64 +278,30 @@ def estimate_cost(request):
 
     return Response(response, status=status.HTTP_200_OK)
 
-
 @api_view(['GET'])
-def container_stats(request, cid):
-    """
-    Return live resource stats for a specific container.
-    Example: GET /api/containers/<id>/stats/
-    """
-    client = get_docker_client()
-    if client is None:
-        return Response({"error": "Docker client not available"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+def container_stats(request, container_id):
+    client = from_env()
+    container = client.containers.get(container_id)
+    stats = container.stats(stream=False)
 
-    try:
-        container = client.containers.get(cid)
-        stats = container.stats(stream=False)
+    cpu_total = stats["cpu_stats"]["cpu_usage"]["total_usage"]
+    system_total = stats["cpu_stats"]["system_cpu_usage"]
+    cpu_percent = (cpu_total / system_total) * 100 if system_total > 0 else 0
 
-        # CPU usage calculation
-        cpu_stats = stats.get('cpu_stats', {})
-        precpu_stats = stats.get('precpu_stats', {})
-        cpu_count = len(cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])) or 1
+    mem_usage = stats["memory_stats"]["usage"] / (1024 ** 3)
+    mem_limit = stats["memory_stats"].get("limit", 1) / (1024 ** 3)
+    mem_percent = (mem_usage / mem_limit) * 100 if mem_limit > 0 else 0
 
-        cpu_delta = cpu_stats.get('cpu_usage', {}).get('total_usage', 0) - \
-                    precpu_stats.get('cpu_usage', {}).get('total_usage', 0)
-        system_delta = cpu_stats.get('system_cpu_usage', 0) - precpu_stats.get('system_cpu_usage', 0)
+    net_rx = stats["networks"]["eth0"]["rx_bytes"] / (1024 ** 2)
+    net_tx = stats["networks"]["eth0"]["tx_bytes"] / (1024 ** 2)
 
-        cpu_percent = 0.0
-        if system_delta > 0 and cpu_delta > 0:
-            cpu_percent = (cpu_delta / system_delta) * cpu_count * 100.0
-
-        # Memory usage
-        mem_stats = stats.get('memory_stats', {})
-        mem_usage = mem_stats.get('usage', 0)
-        mem_limit = mem_stats.get('limit', 1)
-        mem_percent = (mem_usage / mem_limit) * 100.0
-
-        # Network usage
-        networks = stats.get('networks', {})
-        rx_bytes = tx_bytes = 0
-        for iface, data in networks.items():
-            rx_bytes += data.get('rx_bytes', 0)
-            tx_bytes += data.get('tx_bytes', 0)
-
-        result = {
-            "id": container.short_id,
-            "name": container.name,
-            "status": container.status,
-            "cpu_percent": round(cpu_percent, 2),
-            "memory_usage_mb": round(mem_usage / (1024 ** 2), 2),
-            "memory_limit_mb": round(mem_limit / (1024 ** 2), 2),
-            "memory_percent": round(mem_percent, 2),
-            "rx_mb": round(rx_bytes / (1024 ** 2), 2),
-            "tx_mb": round(tx_bytes / (1024 ** 2), 2),
-        }
-        return Response(result)
-
-    except docker.errors.NotFound:
-        return Response({"error": "Container not found"}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response({
+        "cpu_percent": round(cpu_percent, 2),
+        "memory_used_gb": round(mem_usage, 3),
+        "memory_percent": round(mem_percent, 2),
+        "network_rx_mb": round(net_rx, 3),
+        "network_tx_mb": round(net_tx, 3),
+    })
 
 
 @api_view(['GET'])
@@ -404,6 +372,24 @@ def all_containers_stats(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def stream_logs(request, container_id):
+    """
+    Streams live logs for a specific container.
+    Usage: GET /container-logs/<container_id>/
+    """
+    client = from_env()
+    container = client.containers.get(container_id)
+
+    def log_stream():
+        for line in container.logs(stream=True, tail=50, follow=True):
+            yield line.decode('utf-8') + '\n'
+            time.sleep(0.1)  # prevent CPU overuse
+
+    response = StreamingHttpResponse(log_stream(), content_type='text/plain')
+    response['Cache-Control'] = 'no-cache'
+    return response
     
 @api_view(['POST'])
 def stress_test(request):
@@ -490,7 +476,7 @@ def benchmark_container(request):
     """
     data = request.data
     container_id = data.get('container_id')
-    duration = int(data.get('duration', 15))  # default: 15 seconds
+    duration = int(data.get('duration', 15))
 
     if not container_id:
         return Response({"error": "container_id is required"}, status=400)
@@ -633,9 +619,9 @@ def predict_cost_from_benchmark(request):
     # Apply scaling
     scaled_cpu = benchmark.avg_cpu_percent * multiplier
     scaled_mem = benchmark.avg_memory_gb * multiplier
-
+    
     # Estimate costs
-    cpu_cost = (pricing["cpu_hour"] * (scaled_cpu / 100.0)) * duration_hours
+    cpu_cost = pricing["cpu_hour"] * scaled_cpu * duration_hours
     mem_cost = pricing["gb_memory_hour"] * scaled_mem * duration_hours
     total_cost = cpu_cost + mem_cost
 
@@ -650,6 +636,75 @@ def predict_cost_from_benchmark(request):
         "total_cost": round(total_cost, 4),
         "currency": "USD",
         "from_benchmark_timestamp": benchmark.timestamp.isoformat(),
+    }
+
+    return Response(response)
+
+@api_view(['GET'])
+def get_last_benchmark(request, container_id):
+    bench = ContainerBenchmark.objects.filter(container_id=container_id).order_by("timestamp").first()
+    if not bench:
+        return Response({"detail": "No benchmark found"}, status=404)
+    return Response({
+        "avg_cpu_percent": bench.avg_cpu_percent,
+        "avg_memory_gb": bench.avg_memory_gb,
+        "avg_disk_io_mb_s": bench.avg_disk_io_mb_s,
+        "avg_net_io_mb_s": bench.avg_net_io_mb_s,
+        "timestamp": bench.timestamp
+    })
+
+@api_view(['POST'])
+def generate_report(request):
+    """
+    Returns container metrics and predicted cost.
+    Example input:
+    {
+      "container_id": "abc123",
+      "provider": "AWS",
+      "duration_hours": 168
+    }
+    """
+    data = request.data
+    cid = data.get("container_id")
+    provider = data.get("provider", "AWS")
+    duration_hours = float(data.get("duration_hours", 168))
+
+    try:
+        bench = ContainerBenchmark.objects.filter(container_id=cid).order_by("-created_at").first()
+    except:
+        bench = None
+
+    avg_cpu = getattr(bench, "avg_cpu_percent", 42.3)
+    avg_mem = getattr(bench, "avg_memory_gb", 1.8)
+    avg_disk = getattr(bench, "avg_disk_io_mb_s", 0.6)
+    avg_net = getattr(bench, "avg_net_io_mb_s", 0.4)
+    container_name = getattr(bench, "container_name", f"Container-{cid[:6]}" if cid else "Unknown")
+
+    pricing = {
+        "AWS": {"cpu_hour": 0.045, "gb_memory_hour": 0.005},
+        "Azure": {"cpu_hour": 0.043, "gb_memory_hour": 0.006},
+        "GCP": {"cpu_hour": 0.047, "gb_memory_hour": 0.004}
+    }
+
+    if provider not in pricing:
+        provider = "AWS"
+
+    cost_cpu = pricing[provider]["cpu_hour"] * (avg_cpu / 100.0) * duration_hours
+    cost_mem = pricing[provider]["gb_memory_hour"] * avg_mem * duration_hours
+    total = cost_cpu + cost_mem
+
+    response = {
+        "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+        "container_id": cid,
+        "container_name": container_name,
+        "provider": provider,
+        "duration_hours": duration_hours,
+        "avg_cpu_percent": round(avg_cpu, 2),
+        "avg_memory_gb": round(avg_mem, 3),
+        "avg_disk_io_mb_s": round(avg_disk, 3),
+        "avg_net_io_mb_s": round(avg_net, 3),
+        "predicted_cost": round(total, 6),
+        "pricing_used": pricing[provider],
     }
 
     return Response(response)

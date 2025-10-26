@@ -2,19 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-terminal-bg text-terminal-text font-mono;
-  background-image: linear-gradient(90deg, rgba(88,166,255,0.05) 1px, transparent 1px),
-                    linear-gradient(0deg, rgba(88,166,255,0.05) 1px, transparent 1px);
-  background-size: 20px 20px;
-  animation: gridmove 20s linear infinite;
+:root {
+  --bg: #0f172a;
+  --card: #0f2536;
+  --accent: #38bdf8;
+  --muted: #94a3b8;
+  --text: #e6eef8;
 }
 
-@keyframes gridmove {
-  0% {
-    background-position: 0 0, 0 0;
-  }
-  100% {
-    background-position: 20px 20px, 20px 20px;
-  }
+html, body, #root {
+  height: 100%;
 }
+
+body {
+  @apply bg-dark-bg text-text-primary font-mono;
+  background-image:
+    linear-gradient(90deg, rgba(56,189,248,0.02) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(56,189,248,0.02) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+@layer base {
+  /* Width of the scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* Track styling */
+  ::-webkit-scrollbar-track {
+    background: #edf2f700;
+    border-radius: 10px;
+  }
+
+  /* Thumb styling */
+  ::-webkit-scrollbar-thumb {
+    background-color: #027cff60;
+    border-radius: 10px;
+    border: 2px solid #027cff60;
+  }
+
+  /* Hover effect on thumb */
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(132, 152, 181)60;
+  }
+}   
+
+.dark::-webkit-scrollbar {
+  background-color: #2d3748;
+}
+
+.dark::-webkit-scrollbar-thumb {
+  background-color: #718096;
+}   

@@ -1,25 +1,21 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,jsx,ts,tsx}"
-  ],
+  content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
-        terminal: {
-          bg: "#0d1117",
-          text: "#c9d1d9",
-          accent: "#58a6ff",
-          danger: "#f85149",
-          success: "#3fb950",
-          warning: "#d29922"
-        }
+        'dark-bg': '#0f172a',
+        'panel-bg': '#0f172a',
+        'card-bg': '#0f2536',
+        'accent': '#38bdf8',
+        'accent-2': '#7dd3fc',
+        'text-primary': '#e6eef8',
+        'text-secondary': '#94a3b8',
       },
       fontFamily: {
-        mono: ['"Fira Code"', 'monospace']
+        mono: ['"Fira Code"', 'ui-monospace', 'SFMono-Regular', 'monospace']
       }
     },
   },
   plugins: [],
-}
+};

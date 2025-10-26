@@ -1,16 +1,20 @@
-import HostStats from "./components/HostStats";
-import ContainerList from "./components/ContainerList";
-import TerminalLogs from "./components/TerminalLogs";
+import React, { useState } from "react";
+import Topbar from "./components/Topbar";
+import Sidebar from "./components/Sidebar";
+import Dashboard from "./components/Dashboard";
 
 export default function App() {
+  const [active, setActive] = useState("predictions"); // default tab
+
   return (
-    <div className="min-h-screen p-6 bg-terminal-bg text-terminal-text">
-      <h1 className="text-3xl mb-6 text-terminal-accent font-bold">⚙️ MicroMonitor Dashboard</h1>
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <HostStats />
-        <ContainerList />
+    <div className="min-h-screen flex flex-col">
+      <Topbar />
+      <div className="flex flex-1">
+        <Sidebar active={active} onChange={setActive} />
+        <main className="flex-1 p-6 overflow-auto">
+          <Dashboard active={active} />
+        </main>
       </div>
-      <TerminalLogs />
     </div>
   );
 }
