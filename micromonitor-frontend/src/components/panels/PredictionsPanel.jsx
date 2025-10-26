@@ -67,7 +67,7 @@ export default function PredictionsPanel() {
       setPrediction(res);
     } catch (e) {
       console.error(e);
-      alert("Prediction failed: " + e.message);
+      alert("Please run a benchmark on the container before predicting pricing")
     } finally {
       setLoading(false);
     }
