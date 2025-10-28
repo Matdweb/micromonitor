@@ -7,10 +7,9 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app:cached
-      - /var/run/docker.sock:/var/run/docker.sock   # allow backend container to talk to host docker
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - PYTHONUNBUFFERED=1
-    # For development you may want to skip running migrations automatically here; run manually first
 
   frontend:
     build: ./micromonitor-frontend
