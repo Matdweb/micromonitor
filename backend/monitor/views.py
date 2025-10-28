@@ -662,49 +662,69 @@ def generate_report(request):
       "container_id": "abc123",
       "provider": "AWS",
       "duration_hours": 168
+      "intesity": "medium"
     }
     """
+    
     data = request.data
-    cid = data.get("container_id")
+    container_id = data.get("container_id")
     provider = data.get("provider", "AWS")
-    duration_hours = float(data.get("duration_hours", 168))
+    duration_hours = float(data.get("duration_hours", 1))
+    intensity = data.get("workload_intensity", "light").lower()
+
+    if not container_id:
+        return Response({"error": "container_id is required"}, status=400)
 
     try:
-        bench = ContainerBenchmark.objects.filter(container_id=cid).order_by("-created_at").first()
-    except:
-        bench = None
-
-    avg_cpu = getattr(bench, "avg_cpu_percent", 42.3)
-    avg_mem = getattr(bench, "avg_memory_gb", 1.8)
-    avg_disk = getattr(bench, "avg_disk_io_mb_s", 0.6)
-    avg_net = getattr(bench, "avg_net_io_mb_s", 0.4)
-    container_name = getattr(bench, "container_name", f"Container-{cid[:6]}" if cid else "Unknown")
-
-    pricing = {
-        "AWS": {"cpu_hour": 0.045, "gb_memory_hour": 0.005},
-        "Azure": {"cpu_hour": 0.043, "gb_memory_hour": 0.006},
-        "GCP": {"cpu_hour": 0.047, "gb_memory_hour": 0.004}
+        benchmark = (
+            ContainerBenchmark.objects
+            .filter(container_id=container_id)
+            .order_by("-timestamp")
+            .first()
+        )
+        if not benchmark:
+            return Response({"error": "No benchmark data found for container"}, status=500)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+    
+    WORKLOAD_MULTIPLIERS = {
+        "light": 1.0,
+        "medium": 1.5,
+        "heavy": 2.5
     }
+    
+    # Load pricing
+    pricing = DEFAULT_PRICING.get(provider, DEFAULT_PRICING["AWS"])
+    multiplier = WORKLOAD_MULTIPLIERS.get(intensity, 1.0)
 
-    if provider not in pricing:
-        provider = "AWS"
-
-    cost_cpu = pricing[provider]["cpu_hour"] * (avg_cpu / 100.0) * duration_hours
-    cost_mem = pricing[provider]["gb_memory_hour"] * avg_mem * duration_hours
-    total = cost_cpu + cost_mem
+    # Apply scaling
+    scaled_cpu = benchmark.avg_cpu_percent * multiplier
+    scaled_mem = benchmark.avg_memory_gb * multiplier
+    
+    avg_disk = getattr(benchmark, "avg_disk_io_mb_s", 0.6)
+    avg_net = getattr(benchmark, "avg_net_io_mb_s", 0.4)
+    
+    pricing = DEFAULT_PRICING.get(provider, DEFAULT_PRICING["AWS"])
+        
+    # Estimate costs
+    cpu_cost = pricing["cpu_hour"] * scaled_cpu * duration_hours
+    mem_cost = pricing["gb_memory_hour"] * scaled_mem * duration_hours
+    
+    container_name = getattr(benchmark, "container_name", f"Container-{container_id}" if container_id else "Unknown")
+    total = cpu_cost + mem_cost
 
     response = {
         "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
-        "container_id": cid,
+        "container_id": container_id,
         "container_name": container_name,
         "provider": provider,
         "duration_hours": duration_hours,
-        "avg_cpu_percent": round(avg_cpu, 2),
-        "avg_memory_gb": round(avg_mem, 3),
+        "avg_cpu_percent": round(scaled_cpu, 2),
+        "avg_memory_gb": round(scaled_mem, 3),
         "avg_disk_io_mb_s": round(avg_disk, 3),
         "avg_net_io_mb_s": round(avg_net, 3),
         "predicted_cost": round(total, 6),
-        "pricing_used": pricing[provider],
+        "pricing_used": pricing,
     }
 
     return Response(response)
