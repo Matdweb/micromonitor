@@ -254,6 +254,9 @@ networks:
 
 ---
 
+## Demo 📷
+
+https://github.com/user-attachments/assets/5227bd70-da1b-44ca-a1b4-79975920ff60
 
 🧩 Project by [Matias Vargas](https://mat-dweb.lovable.app/)  
 *"MicroMonitor: Benchmark smarter. Predict faster. Deploy cheaper.”*
