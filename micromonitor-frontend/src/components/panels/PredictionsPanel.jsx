@@ -123,6 +123,7 @@ export default function PredictionsPanel() {
               const res = await api.generateReportData({
                 container_id: selected,
                 provider,
+                workload_intensity: intensity,
                 duration_hours: Number(hours)
               });
 
@@ -142,7 +143,7 @@ export default function PredictionsPanel() {
                   </ul>
                   <hr style="border-color:#123148;">
                   <h3 style="color:#38bdf8;">Predicted Cost</h3>
-                  <p style="margin:0;">CPU: $${(res.pricing_used.cpu_hour * res.duration_hours * (res.avg_cpu_percent/100)).toFixed(4)}</p>
+                  <p style="margin:0;">CPU: $${(res.pricing_used.cpu_hour * res.duration_hours * (res.avg_cpu_percent)).toFixed(4)}</p>
                   <p style="margin:0;">Memory: $${(res.pricing_used.gb_memory_hour * res.duration_hours * res.avg_memory_gb).toFixed(4)}</p>
                   <p style="font-weight:bold;">Total: $${res.predicted_cost}</p>
                   <hr style="border-color:#123148;">
