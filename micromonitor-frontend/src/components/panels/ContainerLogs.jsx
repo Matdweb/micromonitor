@@ -39,11 +39,6 @@ export default function ContainerLogs({ selected }) {
     };
   }, [selected]);
   
-
-  useEffect(()=>{
-    console.log(logs)
-  },[logs])
-
   return (
     <div className="bg-panel-bg p-4 rounded-lg text-sm font-mono text-text-secondary overflow-y-auto h-full max-h-80 border border-[#1e2d3d]">
       <h3 className="text-accent mb-2">Live Logs</h3>
